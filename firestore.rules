@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(ownerId) {
+      return isSignedIn() && request.auth.uid == ownerId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Entity Validations ---
+    function isValidStore(data) {
+      return data.keys().hasAll(['name', 'address', 'closingTime', 'imageUrl', 'rating', 'ownerId'])
+        && data.keys().size() == 6
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.address is string && data.address.size() > 0 && data.address.size() <= 200
+        && data.closingTime is string && data.closingTime.size() <= 20
+        && data.imageUrl is string && data.imageUrl.size() <= 500
+        && data.rating is number && data.rating >= 0 && data.rating <= 5
+        && data.ownerId == request.auth.uid;
+    }
+
+    function isValidBasket(data) {
+      return data.keys().hasAll(['storeId', 'title', 'description', 'originalPrice', 'discountPrice', 'ingredients', 'inStock', 'availableUntil'])
+        && (data.keys().size() == 8 || (data.keys().size() == 9 && data.keys().hasAll(['imageUrl'])))
+        && isValidId(data.storeId)
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 100
+        && data.description is string && data.description.size() <= 600
+        && data.originalPrice is number && data.originalPrice > 0
+        && data.discountPrice is number && data.discountPrice >= 0 && data.discountPrice < data.originalPrice
+        && data.ingredients is list && data.ingredients.size() <= 20
+        && data.inStock is bool
+        && data.availableUntil is string && data.availableUntil.size() <= 20
+        && (!data.keys().hasAll(['imageUrl']) || (data.imageUrl is string && data.imageUrl.size() <= 600));
+    }
+
+    // --- Rules ---
+
+    match /stores/{storeId} {
+      allow get: if true;
+      allow list: if true; 
+      
+      allow create: if isSignedIn() && isValidId(storeId) && isValidStore(incoming());
+      
+      allow update: if isOwner(existing().ownerId) 
+        && isValidStore(incoming())
+        && incoming().ownerId == existing().ownerId;
+        
+      allow delete: if isOwner(existing().ownerId);
+    }
+
+    match /baskets/{basketId} {
+      allow get: if true;
+      allow list: if true; 
+      
+      allow create: if isSignedIn() 
+        && isValidId(basketId) 
+        && isValidBasket(incoming())
+        && isOwner(get(/databases/$(database)/documents/stores/$(incoming().storeId)).data.ownerId);
+
+      allow update: if isSignedIn()
+        && isValidBasket(incoming())
+        && isOwner(get(/databases/$(database)/documents/stores/$(existing().storeId)).data.ownerId)
+        && (
+          // Action: Toggle Stock
+          (incoming().diff(existing()).affectedKeys().hasOnly(['inStock'])) ||
+          // Action: Update details
+          (incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'originalPrice', 'discountPrice', 'ingredients', 'availableUntil', 'imageUrl'])) ||
+          // Action: Full update
+          (incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'originalPrice', 'discountPrice', 'ingredients', 'availableUntil', 'inStock', 'imageUrl']))
+        );
+
+      allow delete: if isSignedIn()
+        && isOwner(get(/databases/$(database)/documents/stores/$(existing().storeId)).data.ownerId);
+    }
+  }
+}

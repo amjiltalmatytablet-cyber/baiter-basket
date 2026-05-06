@@ -1,0 +1,45 @@
+{
+  "entities": {
+    "Store": {
+      "title": "Store",
+      "description": "A local cafe or bakery",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "closingTime": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "rating": { "type": "number" },
+        "ownerId": { "type": "string" }
+      },
+      "required": ["name", "address", "ownerId"]
+    },
+    "Basket": {
+      "title": "Basket",
+      "description": "A surprise bag of surplus food",
+      "type": "object",
+      "properties": {
+        "storeId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "originalPrice": { "type": "number" },
+        "discountPrice": { "type": "number" },
+        "ingredients": { "type": "array", "items": { "type": "string" } },
+        "inStock": { "type": "boolean" },
+        "availableUntil": { "type": "string" },
+        "imageUrl": { "type": "string" }
+      },
+      "required": ["storeId", "title", "originalPrice", "discountPrice", "inStock"]
+    }
+  },
+  "firestore": {
+    "/stores/{storeId}": {
+      "schema": "Store",
+      "description": "Collection of stores"
+    },
+    "/baskets/{basketId}": {
+      "schema": "Basket",
+      "description": "Collection of available baskets"
+    }
+  }
+}
